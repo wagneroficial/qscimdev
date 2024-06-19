@@ -1,6 +1,8 @@
 const { formatAuth } = require("../../../utils/formatAuth");
 const { formatURL } = require("../../../utils/formatURL");
 const { getCacheInfo } = require("../../../utils/getCacheInfo");
+const axios = require("axios");
+
 let api;
 try {
   api = require("@opentelemetry/api");
@@ -13,31 +15,33 @@ async function fetchApi(ctx, caches, request) {
   const port = ctx.request.header.host.split(":")[1];
   let formattedURL = formatURL(ctx.request.body, request.url);
 
-  let formattedAuth = formatAuth(
-    await getCacheInfo(request.auth, caches, port)
-  );
+  let formattedAuth = (
+    await formatAuth(
+      await getCacheInfo(request.auth, caches, port),
+      `http://localhost:${port}`
+    )
+  ).token;
 
-  let headers = {
+  const headers = {
     Authorization: formattedAuth,
-    ...(request.headers || {}),
+    ...((await getCacheInfo(request.headers, caches, port)) || {}),
   };
 
-  if (request.body) {
-    headers["Content-Type"] = "application/json";
-  }
-
-  const response = await fetch(formattedURL, {
-    method: request.method,
-    headers: getCacheInfo(headers, caches, port),
-    body: request.body
-      ? JSON.stringify(getCacheInfo(request.body), caches, port)
-      : undefined,
-  });
-  const jsonData = await response.json();
+  const response = await axios
+    .request({
+      url: formattedURL,
+      method: request.method,
+      headers,
+      data: request.body,
+    })
+    .then((res) => res.data)
+    .catch((err) => {
+      console.log(err);
+    });
 
   let responseAttrs = {};
   request.mapping.forEach((item) => {
-    responseAttrs[item.mapTo] = jsonData[item.name];
+    responseAttrs[item.mapTo] = response[item.name];
   });
 
   ctx.request.body = { ...ctx.request.body, ...responseAttrs };

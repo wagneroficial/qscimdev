@@ -30,8 +30,8 @@ const countries = require('../lib/countries')
 const { createChecker } = require('is-in-subnet')
 const { createTerminus } = require('@godaddy/terminus')
 require('events').EventEmitter.prototype._maxListeners = Infinity
-const { fetchInterceptors } = require('./interceptors/functions')
-const { fetchNotification } = require('./adapters/functions/notifications')
+const { fetchInterceptors } = require('./interceptors')
+const { fetchAdapters } = require('./adapters')
 const { cache } = require('./adapters/functions/cache')
 const { useListeners } = require('./listeners')
 require('dotenv')
@@ -661,7 +661,7 @@ try{
   const app = new Koa()
   const router = new Router()
 
-  useListeners(ScimGateway.prototype.endpointMapper, config.auth, require(configFile).endpoint.map)
+  useListeners(ScimGateway.prototype.endpointMapper, config.auth, require(configFile).endpoint.map, caches)
 
 app.use(cors({ origin: '*', credentials: true }));
 
@@ -718,7 +718,7 @@ app.use(cors({ origin: '*', credentials: true }));
     return new Promise(async(resolve) => {
     
       async function runAdapters(){        
-        const notificationRes = await fetchNotification(ctx, 'before', caches, verifyTracing)
+        const notificationRes = await fetchAdapters(ctx, 'before', caches, verifyTracing)
         if(notificationRes){
           resolve(next());  
         } else{
@@ -996,12 +996,12 @@ app.use(cors({ origin: '*', credentials: true }));
         scimdata.meta.location = location
       }
       ctx.body = scimdata
-      await fetchNotification(ctx, 'onSuccess', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing)
     } catch (err) {
       let scimType = errorStatus(err, isScimv2, ctx)
       const e = jsonErr(config.scim.version, pluginName, ctx.status, err)
       ctx.body = e
-      await fetchNotification(ctx, 'onError', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onError', caches, verifyTracing)
     }
     
     endSpan(ctx, span, requestSpan)
@@ -1211,12 +1211,12 @@ app.use(cors({ origin: '*', credentials: true }));
       scimdata = addSchemas(scimdata, handle.description, isScimv2, location)
 
       ctx.body = scimdata
-      await fetchNotification(ctx, 'onSuccess', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing)
     } catch (err) {
       let scimType = errorStatus(err, isScimv2, ctx)
       const e = jsonErr(config.scim.version, pluginName, ctx.status, err, scimType)
       ctx.body = e
-      await fetchNotification(ctx, 'onError', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onError', caches, verifyTracing)
     }
     endSpan(ctx, span, requestSpan)
     })
@@ -1318,12 +1318,12 @@ app.use(cors({ origin: '*', credentials: true }));
       ctx.set('Location', location)
       ctx.status = 201
       ctx.body = jsonBody
-      await fetchNotification(ctx, 'onSuccess', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing)
     } catch (err) {
       let scimType = errorStatus(err, isScimv2, ctx)
       const e = jsonErr(config.scim.version, pluginName, ctx.status, err, scimType)
       ctx.body = e
-      await fetchNotification(ctx, 'onError', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onError', caches, verifyTracing)
     }
     endSpan(ctx, span, requestSpan)
   })
@@ -1356,12 +1356,12 @@ app.use(cors({ origin: '*', credentials: true }));
     try {
       await this[handle.deleteMethod](ctx.params.baseEntity, id, ctx.ctxCopy)
       ctx.status = 204
-      await fetchNotification(ctx, 'onSuccess', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing)
     } catch (err) {
       let scimType = errorStatus(err, isScimv2, ctx)   
       const e = jsonErr(config.scim.version, pluginName, ctx.status, err)
       ctx.body = e
-      await fetchNotification(ctx, 'onError', caches, verifyTracing)
+      await fetchAdapters(ctx, 'onError', caches, verifyTracing)
     }
     endSpan(ctx, span, requestSpan)
   })
@@ -1449,12 +1449,12 @@ app.use(cors({ origin: '*', credentials: true }));
         scimdata = addSchemas(scimdata, handle.description, isScimv2)
         ctx.status = 200
         ctx.body = scimdata
-        await fetchNotification(ctx, 'onSuccess', caches, verifyTracing, ScimGateway.prototype.convertedScim20(ctx.request.body))
+        await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing, ScimGateway.prototype.convertedScim20(ctx.request.body))
       } catch (err) {
         let scimType = errorStatus(err, isScimv2, ctx)
         const e = jsonErr(config.scim.version, pluginName, ctx.status, err, scimType)
         ctx.body = e
-        await fetchNotification(ctx, 'onError', caches, verifyTracing, ScimGateway.prototype.convertedScim20(ctx.request.body))
+        await fetchAdapters(ctx, 'onError', caches, verifyTracing, ScimGateway.prototype.convertedScim20(ctx.request.body))
       }
     }
     endSpan(ctx, span, requestSpan)
@@ -1657,12 +1657,12 @@ app.use(cors({ origin: '*', credentials: true }));
         scimdata = addSchemas(scimdata, handle.description, isScimv2)
         ctx.status = 200
         ctx.body = scimdata
-        await fetchNotification(ctx, 'onSuccess', caches, verifyTracing)
+        await fetchAdapters(ctx, 'onSuccess', caches, verifyTracing)
       } catch (err) {
         let scimType = errorStatus(err, isScimv2, ctx)
         const e = jsonErr(config.scim.version, pluginName, ctx.status, err)
         ctx.body = e
-        await fetchNotification(ctx, 'onError', caches, verifyTracing)
+        await fetchAdapters(ctx, 'onError', caches, verifyTracing)
       }
     }
     endSpan(ctx, span, requestSpan)

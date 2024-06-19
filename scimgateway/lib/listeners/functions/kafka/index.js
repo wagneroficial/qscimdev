@@ -1,4 +1,5 @@
 const { Kafka } = require("kafkajs");
+const axios = require("axios");
 
 async function useKafkaListener(config, auth, endpointMapper, map) {
   const kafka = new Kafka({
@@ -12,16 +13,12 @@ async function useKafkaListener(config, auth, endpointMapper, map) {
     ssl: true,
   });
 
-  const filteredAuth = auth.basic.filter((item) => !item.readOnly)[0];
-
-  if (!filteredAuth) {
-    console.error("No Basic Auth provided for kafka listener");
-  }
-
-  const token = Buffer.from(
-    `${filteredAuth.username}:${filteredAuth.password}`
-  ).toString("base64");
-  const consumer = kafka.consumer({ groupId: config.group_id });
+  const api = axios.create({
+    baseURL: `http://localhost:${config.port}/${config.path}`,
+    headers: {
+      Authorization: auth,
+    },
+  });
 
   async function handleMessages() {
     await consumer.connect();
@@ -30,44 +27,30 @@ async function useKafkaListener(config, auth, endpointMapper, map) {
     await consumer.run({
       eachMessage: async ({ topic, partition, message }) => {
         try {
-          body = JSON.parse(message.value.toString());
+          data = JSON.parse(message.value.toString());
 
           if (config.mapping && Object.keys(config.mapping).length) {
-            body = await endpointMapper(
+            data = await endpointMapper(
               "inbound",
               JSON.parse(message.value.toString()),
               config.mapping
             ).then((res) => res[0]);
           }
 
-          const response = await fetch(
-            `http://localhost:${config.port}/${config.path}/${body.userName}`,
-            {
-              method: "GET",
-              headers: {
-                Authorization: `Basic ${token}`,
-              },
-            }
-          );
-
-          let url = `http://localhost:${config.port}/${config.path}`;
-          let method = "POST";
-          if (response.ok) {
-            console.log(`${config.path} Already exist! Updating...`);
-            url += `/${body.userName}`;
-            method = "PATCH";
-          } else {
-            console.log(`${config.path} Already does not exist! Creating...`);
-          }
-
-          await fetch(url, {
-            method: method,
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Basic ${token}`,
-            },
-            body: JSON.stringify(body),
-          });
+          let idValue = config.path === "users" ? data.userName : data.id;
+          await api
+            .get(`/${idValue}`)
+            .then((res) => {
+              console.log(`${config.path} Already exist!`);
+              if (config.update) {
+                console.log("Updating...");
+                api.patch(`/${idValue}`, data);
+              }
+            })
+            .catch((err) => {
+              console.log(`${config.path} Already does not exist! Creating...`);
+              api.post("", data);
+            });
         } catch (err) {
           console.log(`Error while doing request: ${err.message}`);
         }

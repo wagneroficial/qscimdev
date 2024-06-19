@@ -1,39 +1,39 @@
 const { formatAuth } = require("../../../utils/formatAuth");
+const axios = require("axios");
+let api;
+try {
+  api = require("@opentelemetry/api");
+} catch (err) {}
 
 async function createCacheFetchFunction(request) {
+  const activeSpan = api?.trace.getSpan(api?.context.active());
   try {
-    let formattedURL = request.url;
-    console.log("URL:", request.url);
-
     let headers = {
-      Authorization: formatAuth(request.auth),
+      Authorization: (
+        await formatAuth(request.auth, `http://localhost:${request.port}`)
+      ).token,
       ...request.headers,
     };
 
-    if (request.body) {
-      headers["Content-Type"] = "application/json";
-    }
+    activeSpan?.addEvent("Getting Cache");
 
-    const response = await fetch(formattedURL, {
-      method: request.method,
-      headers: headers,
-      body: request.body ? JSON.stringify(request.body) : undefined,
-    });
-
-    if (![200, 201].includes(response.status)) {
-      console.log(await response.json());
-      throw new Error(`Request returned status ${response.status}`);
-    }
-
-    const jsonData = await response.json();
+    const response = await axios
+      .request({
+        url: request.url,
+        method: request.method,
+        headers,
+        data: request.body,
+      })
+      .then((res) => res.data);
 
     let responseAttrs = {};
     request.mapping.forEach((item) => {
-      responseAttrs[item.mapTo] = jsonData[item.name];
+      responseAttrs[item.mapTo] = response[item.name];
     });
 
     return responseAttrs;
   } catch (error) {
+    activeSpan?.addEvent("Adapter: Error sending notification");
     console.log("Error caching information:", error.message);
     return {};
   }
